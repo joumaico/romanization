@@ -1,19 +1,107 @@
-import numpy as np
+import itertools
+import re
+import typing as t
 import unicodedata
 
-from .const import LATIN
-from .const import TWIN_CASE_PROVISION
-
-from .utils import Locator
-from .utils import custom_split
-from .utils import get_chosung
-from .utils import get_jongsung
-from .utils import get_jungsung
-from .utils import split_into_chunks
-from .utils import split_jamo
+from .const import CONSONANTS, DOUBLES, CHOSUNG, JUNGSEONG, JONGSUNG, PROVISIONS
 
 
-locator = Locator()
+def decompose_hangul(char: str) -> t.Tuple[str, str, str]:
+    """
+    Decomposes a single Hangul syllable into its constituent jamo (choseong, jungseong, jongseong).
+
+    Parameters
+    ----------
+    char : str
+        A single Hangul character.
+
+    Returns
+    -------
+    Tuple[str, str, str]
+        A tuple containing the choseong, jungseong, and jongseong of the character.
+
+    Examples
+    --------
+    >>> decompose_hangul("가")
+    ("ᄀ", "ᅡ", "")
+
+    >>> decompose_hangul("각")
+    ("ᄀ", "ᅡ", "ᆨ")
+    """
+    x = ord(char)
+    if 44032 <= x <= 55203:
+        a = x - 44032
+        b = a % 28
+        c = 1 + ((a - b) % 588) // 28
+        d = 1 + a // 588
+        q = [*map(sum, zip(*[[d, c, b], [4351, 4448, 4519]]))]
+        if b:
+            return (chr(q[0]), chr(q[1]), chr(q[2]))
+        return (chr(q[0]), chr(q[1]), '')
+    return ('', char, '')
+
+
+def convert_hangul_to_jamo(syllables: str) -> str:
+    """
+    Converts a string of Hangul syllables into a string of jamo characters.
+
+    Parameters
+    ----------
+    syllables : str
+        A string of Hangul syllables.
+
+    Returns
+    -------
+    str
+        A string of jamo characters representing the input Hangul syllables.
+    """
+    output = []
+
+    data = []
+    for syllable in syllables:
+        block = decompose_hangul(syllable)
+        for index, char in enumerate(block):
+            if char:
+                if index == 0:
+                    data.extend(CHOSUNG.get(ord(char)))
+                elif index == 1:
+                    data.append(JUNGSEONG.get(ord(char)))
+                elif index == 2:
+                    data.extend(JONGSUNG.get(ord(char)))
+    data = [list(group) for _, group in itertools.groupby(data, key=lambda x: isinstance(x, int))]
+
+    prefix = data[0]
+    try:
+        if len(prefix) == 1:
+            output.append(CONSONANTS[prefix[0]][0])
+        elif len(prefix) == 2:
+            output.append(CONSONANTS[prefix[0]][1])
+    except Exception:
+        pass
+
+    for d in data[1:-1]:
+        if isinstance(d[0], str):
+            output.append(d[0])
+            continue
+
+        if len(d) == 1:
+            output.append(CONSONANTS[d[0]][0])
+        elif len(d) == 2:
+            output.append(CONSONANTS[d[0]][1] if d[0] == d[1] and d[0] in DOUBLES else PROVISIONS[tuple(d)])
+        elif len(d) == 3:
+            if d[0] == d[1]:
+                output.append(CONSONANTS[d[0]][1] if d[2] == 0x3147 else PROVISIONS[(d[0], d[2])])
+            else:
+                output.append(CONSONANTS[d[0]][2])
+                output.append(CONSONANTS[d[1]][1] if d[1] == d[2] else PROVISIONS[(d[1], d[2])])
+
+    suffix = data[-1]
+    try:
+        output.append(CONSONANTS[suffix[0]][2])
+    except Exception:
+        output.append(suffix[0])
+
+    return "".join(output)
 
 
 def romanize(text: str) -> str:
@@ -39,58 +127,18 @@ def romanize(text: str) -> str:
     ----------
     https://en.wikipedia.org/w/index.php?title=Revised_Romanization_of_Korean&oldid=1064463473
     """
-    result = []
+    output = ""
 
-    for word in custom_split(text):
-        process = False
-        for i in word:
-            if unicodedata.category(i) == "Lo":  # checks if a word has Hangul syllable
-                process = True
-                break
-        if process:
-            dump = []
-            for index, block in enumerate(split_into_chunks((j for i in split_jamo(word) for j in i), 3)):
-                if len(block) == 1:  # for standalone syllable "책"
-                    block = (block[0], "", "")
+    # Regular expression to separate Korean words, spaces, punctuation, and non-Korean words
+    pattern = r"([ㄱ-ㅎ가-힣]+)|(\s+)|([^\w\s])|([A-Za-z0-9]+)"
+    matches = (match for match in re.split(pattern, text) if match)
+    for match in matches:
+        try:
+            if all("HANGUL" in unicodedata.name(char) for char in match):
+                output += convert_hangul_to_jamo(match)
+            else:
+                output += match
+        except Exception:
+            output += match
 
-                chosung = get_chosung(block[1])
-                jungsung = get_jungsung(block[2])
-                jongsung = get_jongsung(block[0])
-
-                if chosung:
-                    if len(chosung) > 1 and len(set(chosung)) == 1:
-                        if jongsung:  # "올까"
-                            for i in jongsung:
-                                dump.append(LATIN["JONGSUNG"][i])
-                        if ord(chosung[0]) == 12593:  # ㄲ: "깐다"
-                            dump.append(TWIN_CASE_PROVISION[chosung[0]])
-                        else:
-                            if index == 0:  # "뚜두"
-                                dump.append(LATIN["CHOSUNG"][chosung[0]] * 2)
-                            else:  # "오빠"
-                                dump.append(TWIN_CASE_PROVISION[chosung[0]])
-                    else:
-                        if jongsung:
-                            if len(jongsung) > 1 and len(set(jongsung)) == 1 and ord(chosung[0]) == 12615:  # ㅇ: "있을까"
-                                dump.append(TWIN_CASE_PROVISION[jongsung[0]])
-                            else:
-                                if len(jongsung) > 1 and len(set(jongsung)) >= 2:  # "없어요"
-                                    for i in jongsung[:-1]:
-                                        dump.append(LATIN["JONGSUNG"][i])
-                                col_index = np.where(locator.COL_LABELS == chosung[0])[0][0]
-                                row_index = np.where(locator.ROW_LABELS == jongsung[-1])[0][0]
-                                dump.append(locator.TABLE[row_index, col_index])
-                        else:
-                            dump.append(LATIN["CHOSUNG"][chosung[0]])
-                else:
-                    if jongsung:
-                        dump.append(LATIN["JONGSUNG"][jongsung[0]])
-                if jungsung:
-                    dump.append(jungsung.lower())
-                else:
-                    dump.append(block[2])
-            result.append("".join(dump))
-        else:
-            result.append(word)
-
-    return "".join(result)
+    return output

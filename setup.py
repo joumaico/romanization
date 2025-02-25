@@ -2,13 +2,13 @@ from setuptools import setup
 
 
 def readme():
-    with open("README.md") as f:
+    with open('README.md') as f:
         return f.read()
 
 
 setup(
     name="romanization",
-    version="1.0.0",
+    version="1.1.0",
     author="Joumaico Maulas",
     description="Revised Romanization of Korean",
     long_description=readme(),
@@ -18,11 +18,11 @@ setup(
         "Development Status :: 5 - Production/Stable",
         "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
-        "Programming Language :: Python :: 3.7",
         "Programming Language :: Python :: 3.8",
         "Programming Language :: Python :: 3.9",
         "Programming Language :: Python :: 3.11",
         "Programming Language :: Python :: 3.12",
+        "Programming Language :: Python :: 3.13",
     ],
     packages=[
         "romanization",
@@ -30,17 +30,5 @@ setup(
     package_dir={
         "romanization": "src/romanization",
     },
-    package_data={
-        "romanization": [
-            "convert/data/latin/*",
-            "convert/data/raw/*",
-            "convert/data/provisions",
-            "convert/output/latin/*",
-            "convert/output/raw/*",
-        ]
-    },
-    python_requires=">=3.7",
-    install_requires=[
-        "numpy",
-    ],
+    python_requires=">=3.8",
 )

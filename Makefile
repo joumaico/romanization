@@ -1,6 +1,13 @@
-PYTHON_VERSIONS := 3.7 3.8 3.9 3.11 3.12
+PYTHON_VERSIONS := 3.8 3.9 3.11 3.12 3.13
 
-push:
+install:
+	apt update
+	$(foreach ver,$(PYTHON_VERSIONS),\
+		$(if $(shell dpkg -l python$(ver) python$(ver)-venv 2>/dev/null | grep -q '^ii'), \
+			@echo "Python$(ver) and python$(ver)-venv are already installed",\
+			apt install -y python$(ver) python$(ver)-venv;))
+
+pypi:
 	. .venv/bin/activate && \
 	python setup.py sdist && \
 	twine upload dist/* && \
@@ -14,9 +21,9 @@ pytest:
 		tox -e py$(ver) &&) \
 	deactivate
 
-runtime:
-	apt update
-	$(foreach ver,$(PYTHON_VERSIONS),\
-		$(if $(shell dpkg -l python$(ver) python$(ver)-venv 2>/dev/null | grep -q '^ii'), \
-			@echo "Python$(ver) and python$(ver)-venv are already installed",\
-			apt install -y python$(ver) python$(ver)-venv;))
+venv:
+	python3.13 -m venv .venv && \
+	. .venv/bin/activate && \
+	pip install --upgrade pip && \
+	pip install -r requirements/venv.txt
+

@@ -7,7 +7,7 @@ This software converts Korean Hangul text into Latin alphabet, following the gui
 ```
 Dependencies:
 
-- Python 3.7, 3.8, 3.9, 3.11, 3.12
+- Python 3.8, 3.9, 3.11, 3.12, 3.13
 
 Installation:
 
